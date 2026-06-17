@@ -8,9 +8,11 @@ import Cart from "./components/Cart";
 import CheckoutModal from "./components/CheckoutModal";
 import AdminPanel from "./components/AdminPanel";
 import AdminLogin from "./components/AdminLogin";
+import { API_BASE } from "./config";
 import "./App.css";
 
 export default function App() {
+  const [useLocalFallback, setUseLocalFallback] = useState(false);
   // --- Database States (Fetched from backend) ---
   const [menu, setMenu] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -46,34 +48,82 @@ export default function App() {
     });
   };
 
-  // --- Fetch Initial Backend Data ---
+  // --- Fetch Initial Backend Data with Auto-Probing ---
   useEffect(() => {
-    fetch("/api/menu")
-      .then(res => res.ok ? res.json() : [])
-      .then(data => {
-        if (Array.isArray(data)) setMenu(data);
-      })
-      .catch(err => console.error("Error loading menu:", err));
-
-    fetch("/api/orders")
-      .then(res => res.ok ? res.json() : [])
-      .then(data => {
-        if (Array.isArray(data)) setOrders(data);
-      })
-      .catch(err => console.error("Error loading orders:", err));
-
-    fetch("/api/outlets")
-      .then(res => res.ok ? res.json() : {})
-      .then(data => {
-        if (data && typeof data === 'object' && !Array.isArray(data)) setOutletStatus(data);
-      })
-      .catch(err => console.error("Error loading outlets:", err));
+    const initData = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/menu`);
+        if (!res.ok) throw new Error("Probe failed");
+        const menuData = await res.json();
+        if (Array.isArray(menuData)) {
+          setMenu(menuData);
+          setUseLocalFallback(false);
+          
+          // Fetch orders and outlets from backend
+          const ordersRes = await fetch(`${API_BASE}/api/orders`);
+          if (ordersRes.ok) {
+            const ordersData = await ordersRes.json();
+            if (Array.isArray(ordersData)) setOrders(ordersData);
+          }
+          
+          const outletsRes = await fetch(`${API_BASE}/api/outlets`);
+          if (outletsRes.ok) {
+            const outletsData = await outletsRes.json();
+            if (outletsData && typeof outletsData === 'object' && !Array.isArray(outletsData)) {
+              setOutletStatus(outletsData);
+            }
+          }
+        } else {
+          throw new Error("Invalid menu type");
+        }
+      } catch (err) {
+        console.warn("Auto-probing backend failed. Falling back to client-side localStorage:", err);
+        setUseLocalFallback(true);
+        
+        // Load Menu
+        const savedMenu = localStorage.getItem("idlish_local_menu");
+        if (savedMenu) {
+          setMenu(JSON.parse(savedMenu));
+        } else {
+          localStorage.setItem("idlish_local_menu", JSON.stringify(initialMenu));
+          setMenu(initialMenu);
+        }
+        
+        // Load Orders
+        const savedOrders = localStorage.getItem("idlish_local_orders");
+        if (savedOrders) {
+          setOrders(JSON.parse(savedOrders));
+        } else {
+          setOrders([]);
+        }
+        
+        // Load Outlets
+        const savedOutlets = localStorage.getItem("idlish_local_outlets");
+        if (savedOutlets) {
+          setOutletStatus(JSON.parse(savedOutlets));
+        } else {
+          const defaultOutlets = { "Goregaon East": "Open", "Vile Parle West": "Open" };
+          localStorage.setItem("idlish_local_outlets", JSON.stringify(defaultOutlets));
+          setOutletStatus(defaultOutlets);
+        }
+      }
+    };
+    
+    initData();
   }, []);
 
   // --- WebSocket Real-Time Listener ---
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    if (useLocalFallback) return;
+
+    let wsUrl;
+    if (import.meta.env.DEV) {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      wsUrl = `${protocol}//${window.location.host}/ws`;
+    } else {
+      // Replace http/https with ws/wss and append /ws
+      wsUrl = API_BASE.replace(/^http/, "ws") + "/ws";
+    }
     
     let ws;
     let reconnectTimeout;
@@ -112,7 +162,7 @@ export default function App() {
       if (ws) ws.close();
       clearTimeout(reconnectTimeout);
     };
-  }, []);
+  }, [useLocalFallback]);
 
   // --- Client LocalStorage Synchronization Effects ---
   useEffect(() => {
@@ -173,9 +223,138 @@ export default function App() {
     setCheckoutOpen(true); // Re-open checkout card which acts as tracking screen
   };
 
-  const resetMenuToDefault = () => {
-    fetch("/api/menu/reset", { method: "POST" })
-      .catch(err => console.error("Error resetting menu:", err));
+  // --- Hybrid API / LocalStorage Actions ---
+  const placeOrder = async (newOrder) => {
+    if (useLocalFallback) {
+      const currentOrders = [...orders, newOrder];
+      localStorage.setItem("idlish_local_orders", JSON.stringify(currentOrders));
+      setOrders(currentOrders);
+      return newOrder;
+    } else {
+      const res = await fetch(`${API_BASE}/api/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newOrder)
+      });
+      if (!res.ok) throw new Error("Failed to save order");
+      return await res.json();
+    }
+  };
+
+  const updateOrderStatus = async (orderId, newStatus) => {
+    const updatedPaymentStatus = newStatus === "Completed" ? "Paid" : undefined;
+    if (useLocalFallback) {
+      const updatedOrders = orders.map(o => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            status: newStatus,
+            paymentStatus: updatedPaymentStatus || o.paymentStatus
+          };
+        }
+        return o;
+      });
+      localStorage.setItem("idlish_local_orders", JSON.stringify(updatedOrders));
+      setOrders(updatedOrders);
+    } else {
+      await fetch(`${API_BASE}/api/orders/${orderId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus, paymentStatus: updatedPaymentStatus })
+      });
+    }
+  };
+
+  const deleteOrder = async (orderId) => {
+    if (useLocalFallback) {
+      const updatedOrders = orders.filter(o => o.id !== orderId);
+      localStorage.setItem("idlish_local_orders", JSON.stringify(updatedOrders));
+      setOrders(updatedOrders);
+    } else {
+      await fetch(`${API_BASE}/api/orders/${orderId}`, { method: "DELETE" });
+    }
+  };
+
+  const toggleMenuAvailability = async (itemId) => {
+    const item = menu.find(i => i.id === itemId);
+    if (!item) return;
+    const updatedItem = { ...item, isAvailable: !item.isAvailable };
+    
+    if (useLocalFallback) {
+      const updatedMenu = menu.map(i => i.id === itemId ? updatedItem : i);
+      localStorage.setItem("idlish_local_menu", JSON.stringify(updatedMenu));
+      setMenu(updatedMenu);
+    } else {
+      await fetch(`${API_BASE}/api/menu/${itemId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedItem)
+      });
+    }
+  };
+
+  const saveMenuItem = async (editingItem) => {
+    if (useLocalFallback) {
+      const updatedMenu = menu.map(i => i.id === editingItem.id ? editingItem : i);
+      localStorage.setItem("idlish_local_menu", JSON.stringify(updatedMenu));
+      setMenu(updatedMenu);
+    } else {
+      await fetch(`${API_BASE}/api/menu/${editingItem.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editingItem)
+      });
+    }
+  };
+
+  const deleteMenuItem = async (itemId) => {
+    if (useLocalFallback) {
+      const updatedMenu = menu.filter(i => i.id !== itemId);
+      localStorage.setItem("idlish_local_menu", JSON.stringify(updatedMenu));
+      setMenu(updatedMenu);
+    } else {
+      await fetch(`${API_BASE}/api/menu/${itemId}`, { method: "DELETE" });
+    }
+  };
+
+  const addMenuItem = async (itemToAdd) => {
+    if (useLocalFallback) {
+      const updatedMenu = [...menu, itemToAdd];
+      localStorage.setItem("idlish_local_menu", JSON.stringify(updatedMenu));
+      setMenu(updatedMenu);
+    } else {
+      await fetch(`${API_BASE}/api/menu`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(itemToAdd)
+      });
+    }
+  };
+
+  const toggleOutletStatus = async (outletName) => {
+    const current = outletStatus[outletName] || "Open";
+    const next = current === "Open" ? "Closed" : "Open";
+    
+    if (useLocalFallback) {
+      const updatedOutlets = { ...outletStatus, [outletName]: next };
+      localStorage.setItem("idlish_local_outlets", JSON.stringify(updatedOutlets));
+      setOutletStatus(updatedOutlets);
+    } else {
+      await fetch(`${API_BASE}/api/outlets/${outletName}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next })
+      });
+    }
+  };
+
+  const resetMenuToDefault = async () => {
+    if (useLocalFallback) {
+      localStorage.setItem("idlish_local_menu", JSON.stringify(initialMenu));
+      setMenu(initialMenu);
+    } else {
+      await fetch(`${API_BASE}/api/menu/reset`, { method: "POST" });
+    }
   };
 
   const handleSelectOutlet = (outletName) => {
@@ -221,6 +400,13 @@ export default function App() {
               outletStatus={outletStatus}
               setOutletStatus={setOutletStatus}
               resetMenuToDefault={resetMenuToDefault}
+              updateOrderStatus={updateOrderStatus}
+              deleteOrder={deleteOrder}
+              toggleMenuAvailability={toggleMenuAvailability}
+              saveMenuItem={saveMenuItem}
+              deleteMenuItem={deleteMenuItem}
+              addMenuItem={addMenuItem}
+              toggleOutletStatus={toggleOutletStatus}
               onSignOut={() => {
                 setAdminLoggedIn(false);
                 setCurrentView("store");
@@ -289,6 +475,7 @@ export default function App() {
           addOrder={addOrder}
           activeOrder={activeOrder}
           setActiveOrder={setActiveOrderId}
+          placeOrder={placeOrder}
         />
       )}
 

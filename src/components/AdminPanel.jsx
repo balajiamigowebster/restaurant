@@ -8,6 +8,13 @@ export default function AdminPanel({
   outletStatus, 
   setOutletStatus, 
   resetMenuToDefault,
+  updateOrderStatus,
+  deleteOrder,
+  toggleMenuAvailability,
+  saveMenuItem,
+  deleteMenuItem,
+  addMenuItem,
+  toggleOutletStatus,
   onSignOut
 }) {
   const [activeTab, setActiveTab] = useState("orders"); // orders, menu, outlets
@@ -49,39 +56,20 @@ export default function AdminPanel({
 
   // 3. Order Actions
   const handleStatusChange = (orderId, newStatus) => {
-    const updatedPaymentStatus = newStatus === "Completed" ? "Paid" : undefined;
-    fetch(`/api/orders/${orderId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        status: newStatus,
-        paymentStatus: updatedPaymentStatus
-      })
-    })
+    updateOrderStatus(orderId, newStatus)
       .catch(err => console.error("Error updating order status:", err));
   };
 
   const handleDeleteOrder = (orderId) => {
     if (window.confirm(`Are you sure you want to delete order record ${orderId}?`)) {
-      fetch(`/api/orders/${orderId}`, { method: "DELETE" })
+      deleteOrder(orderId)
         .catch(err => console.error("Error deleting order:", err));
     }
   };
 
   // 4. Menu Actions
   const handleToggleAvailability = (itemId) => {
-    const item = menu.find(i => i.id === itemId);
-    if (!item) return;
-    const updatedItem = { ...item, isAvailable: !item.isAvailable };
-    fetch(`/api/menu/${itemId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(updatedItem)
-    })
+    toggleMenuAvailability(itemId)
       .catch(err => console.error("Error updating menu item availability:", err));
   };
 
@@ -91,20 +79,14 @@ export default function AdminPanel({
 
   const handleSaveEdit = (e) => {
     e.preventDefault();
-    fetch(`/api/menu/${editingItem.id}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(editingItem)
-    })
+    saveMenuItem(editingItem)
       .then(() => setEditingItem(null))
       .catch(err => console.error("Error saving menu item edit:", err));
   };
 
   const handleDeleteItem = (itemId) => {
     if (window.confirm("Are you sure you want to delete this menu item from the catalog?")) {
-      fetch(`/api/menu/${itemId}`, { method: "DELETE" })
+      deleteMenuItem(itemId)
         .catch(err => console.error("Error deleting menu item:", err));
     }
   };
@@ -125,13 +107,7 @@ export default function AdminPanel({
       rating: Number(newItem.rating)
     };
 
-    fetch("/api/menu", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(itemToAdd)
-    })
+    addMenuItem(itemToAdd)
       .then(() => {
         setShowAddForm(false);
         // Reset add form
@@ -153,15 +129,7 @@ export default function AdminPanel({
 
   // 5. Outlet Actions
   const handleToggleOutletStatus = (outletName) => {
-    const current = outletStatus[outletName] || "Open";
-    const next = current === "Open" ? "Closed" : "Open";
-    fetch(`/api/outlets/${outletName}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ status: next })
-    })
+    toggleOutletStatus(outletName)
       .catch(err => console.error("Error updating outlet status:", err));
   };
 

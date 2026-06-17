@@ -11,7 +11,7 @@ const dbConfig = {
   port: parseInt(process.env.DB_PORT || '3306')
 };
 
-const dbName = process.env.DB_DATABASE || 'amigoweb_idlish';
+const dbName = process.env.DB_DATABASE || process.env.DB_NAME || 'amigoweb_idlish';
 
 let pool;
 

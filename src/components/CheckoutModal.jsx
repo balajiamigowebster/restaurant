@@ -7,7 +7,8 @@ export default function CheckoutModal({
   clearCart, 
   addOrder, 
   activeOrder, 
-  setActiveOrder 
+  setActiveOrder,
+  placeOrder
 }) {
   const [orderType, setOrderType] = useState("delivery"); // delivery, dinein
   const [name, setName] = useState("");
@@ -71,20 +72,8 @@ export default function CheckoutModal({
       timestamp: new Date().toISOString()
     };
 
-    // Place order instantly on backend
-    fetch("/api/orders", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(newOrder)
-    })
-      .then(res => {
-        if (!res.ok) {
-          throw new Error("Failed to save order");
-        }
-        return res.json();
-      })
+    // Place order instantly on backend or local storage
+    placeOrder(newOrder)
       .then(savedOrder => {
         addOrder(savedOrder);
         setActiveOrder(savedOrder.id); // Set as the active tracked order ID
