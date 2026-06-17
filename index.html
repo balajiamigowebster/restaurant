@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Café IDlish - South Indian Bistro Online Ordering</title>
+    <meta name="description" content="Order fresh, hot, and delicious South Indian food online from Cafe IDlish. Steamed idlis, crispy dosas, signature fusion paniyarams, and frothed filter coffee delivered to your doorstep." />
+    
+    <!-- Local SEO Structured Schema Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Restaurant",
+      "name": "Café IDlish",
+      "image": "http://localhost:5174/south_indian_feast.png",
+      "priceRange": "$$",
+      "telephone": "+91 98765 43210",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "Shop 10, Yashodham Shopping Centre, Aba Karmarkar Rd",
+        "addressLocality": "Goregaon East, Mumbai",
+        "addressRegion": "MH",
+        "postalCode": "400063",
+        "addressCountry": "IN"
+      },
+      "openingHoursSpecification": {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+        "opens": "07:00",
+        "closes": "23:00"
+      },
+      "menu": "http://localhost:5174/",
+      "servesCuisine": "South Indian, Vegetarian"
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
