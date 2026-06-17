@@ -34,11 +34,24 @@ export default function App() {
 
   // --- UI State ---
   const [cart, setCart] = useState([]);
-  const [currentView, setCurrentView] = useState("home"); // "home", "store" or "admin"
+  const [currentView, setCurrentView] = useState(() => {
+    return sessionStorage.getItem("idlish_current_view") || "home";
+  }); // "home", "store" or "admin"
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [adminLoggedIn, setAdminLoggedIn] = useState(false);
+  const [adminLoggedIn, setAdminLoggedIn] = useState(() => {
+    return sessionStorage.getItem("idlish_admin_logged_in") === "true";
+  });
   const [orderMode, setOrderMode] = useState("Delivery");
+
+  // Sync admin authentication and view states to sessionStorage to persist on refresh
+  useEffect(() => {
+    sessionStorage.setItem("idlish_current_view", currentView);
+  }, [currentView]);
+
+  useEffect(() => {
+    sessionStorage.setItem("idlish_admin_logged_in", adminLoggedIn ? "true" : "false");
+  }, [adminLoggedIn]);
 
   const toggleWishlist = (itemId) => {
     setWishlist((prev) => {
